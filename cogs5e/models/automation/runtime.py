@@ -1,5 +1,5 @@
 from functools import cached_property
-from typing import List, Optional, TYPE_CHECKING, Union
+from typing import List, Dict, Optional, TYPE_CHECKING, Union
 
 import aliasing.api.combat
 import aliasing.api.statblock
@@ -42,6 +42,7 @@ class AutomationContext:
         allow_target_ieffects: bool = True,
         from_button: bool = False,
         original_choice: str = "",
+        simple_targets_damage: Dict[str, int] = None,
     ):
         # runtime options
         self.ctx = ctx
@@ -84,6 +85,7 @@ class AutomationContext:
 
         # node-specific behaviour
         self.target: Optional[AutomationTarget] = None
+        self.simple_targets_damage = simple_targets_damage or dict()
         self.in_crit = False
         self.in_save = False
 
@@ -159,6 +161,10 @@ class AutomationContext:
         self._field_queue.insert(0, {"name": "Meta", "value": "\n".join(self._meta_queue), "inline": False})
         self._meta_queue = []
 
+    def _build_target_footers(self):
+        for name, amount in self.simple_targets_damage.items():
+            self.footer_queue(f"{name}: Dealt {amount} damage in total!")
+
     def build_embed(self):
         """Consumes all items in queues and creates the final embed."""
 
@@ -180,6 +186,9 @@ class AutomationContext:
             self.embed.add_field(name=title, value=effect, inline=False)
         for field in self._postflight_queue:
             self.embed.add_field(**field)
+
+        # set footer
+        self._build_target_footers()
         self.embed.set_footer(text="\n".join(self._footer_queue))
 
     def add_pm(self, user, message):
@@ -330,7 +339,8 @@ class AutomationTarget:
                     autoctx.queue(f"**Concentration**: DC {int(max(amount / 2, 10))}")
         # for a non-init target, we still want to display that a damage node was run in the footer.
         else:
-            autoctx.footer_queue(f"{self.target or '<No Target>'}: Dealt {amount} damage!")
+            target_name = self.target or "<No Target>"
+            autoctx.simple_targets_damage[target_name] = autoctx.simple_targets_damage.get(target_name, 0) + amount
 
     # ==== target base class helpers ====
     @cached_property

@@ -64,9 +64,13 @@ async def run_attack(
     }
     args.update_nx(arg_defaults)
 
-    result = await run_automation(
-        ctx, embed, args, caster, attack.automation, targets, combat, **attack.__run_automation_kwargs__
-    )
+    if attack.automation:
+        result = await run_automation(ctx, embed, args, caster, attack.automation, targets, combat)
+    else:
+        # else, show action description and note that it can't be automated
+        embed.description = "Unknown action effect."
+        embed.set_footer(text="No action automation found.")
+        result = None
 
     # common embed operations
     embeds.add_fields_from_args(embed, args.get("f"))

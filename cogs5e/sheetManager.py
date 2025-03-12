@@ -439,6 +439,12 @@ class SheetManager(commands.Cog):
         if not user_characters:
             return await ctx.send("You have no characters.")
 
+        # AVR-1072: Lookup by character ID.
+        character_by_id = next(filter(lambda char: char["upstream"] == f'{char["sheet_type"]}-{name}', user_characters), None)
+
+        if character_by_id:
+            return Character.deserialize_character_from_dict(str(ctx.author.id), character_by_id)
+
         selected_char = await search_and_select(
             ctx, user_characters, name, lambda e: e["name"], selectkey=lambda e: f"{e['name']} (`{e['upstream']}`)"
         )

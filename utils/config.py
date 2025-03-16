@@ -19,6 +19,9 @@ MONSTER_TOKEN_ENDPOINT = os.getenv("MONSTER_TOKEN_ENDPOINT")  # S3: monster toke
 # secret for the draconic signature() function
 DRACONIC_SIGNATURE_SECRET = os.getenv("DRACONIC_SIGNATURE_SECRET", "secret").encode()
 
+# env for local 3pp testers - disable launchdarkly & enable loading static game data
+OUTSIDE_LOCAL_TESTING = os.getenv("OUTSIDE_LOCAL_TESTING")
+
 # ---- mongo/redis ----
 MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
 MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "avrae")

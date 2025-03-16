@@ -3,6 +3,7 @@ import logging
 
 from ddb.gamelog import GameLogEventContext
 from ddb.gamelog.errors import IgnoreEvent
+import utils.config as config
 import ldclient
 
 
@@ -27,6 +28,10 @@ def feature_flag(flag_name, default=False):
             # note: this means that feature flag targeting can only be controlled by global or individual user id
             # but still, better than nothing
             user = gctx.event.user_id
+
+            # local testing without feature flags: return false, prevent errors
+            if config.OUTSIDE_LOCAL_TESTING:
+                return False
 
             if not user:
                 raise IgnoreEvent(f"User {gctx.event.user_id} has not connected their account")

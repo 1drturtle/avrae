@@ -97,9 +97,9 @@ class Compendium:
 
         loop = asyncio.get_event_loop()
 
-        if mdb is None:
-            await loop.run_in_executor(None, self.load_all_json)
-        else:
+        if config.OUTSIDE_LOCAL_TESTING:
+            await loop.run_in_executor(None, self.load_all_json, "tests/static/compendium")
+        if mdb is not None:
             await self.load_all_mongodb(mdb)
 
         await loop.run_in_executor(None, self.load_common)

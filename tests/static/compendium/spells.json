@@ -334,5 +334,99 @@
     "id": -2103,
     "url": "https://www.dndbeyond.com/spells/fire-bolt",
     "isFree": false
-  }
+  },
+  {
+    "name": "Cure Wounds",
+    "level": 1,
+    "school": "V",
+    "classes": ["Bard", "Cleric", "Druid"],
+    "subclasses": ["Alchemist"],
+    "casttime": "1 bonus action",
+    "range": "60 feet",
+    "components": "V, S",
+    "duration": "Instantaneous",
+    "description": "2024 - A creature of your choice that you can see within range regains hit points equal to 1d4 + your spellcasting ability modifier. This spell has no effect on undead or constructs.",
+    "ritual": false,
+    "higherlevels": "When you cast this spell using a spell slot of 2nd level or higher, the healing increases by 1d4 for each slot level above 1st.",
+    "concentration": false,
+    "automation": [
+        {
+            "type": "target",
+            "target": "each",
+            "effects": [
+                {
+                    "type": "damage",
+                    "damage": "-(1d4+{spell}) [heal]",
+                    "higher": {
+                        "2": "-(1d4) [heal]",
+                        "3": "-(2d4) [heal]",
+                        "4": "-(3d4) [heal]",
+                        "5": "-(4d4) [heal]",
+                        "6": "-(5d4) [heal]",
+                        "7": "-(6d4) [heal]",
+                        "8": "-(7d4) [heal]",
+                        "9": "-(8d4) [heal]"
+                    }
+                }
+            ]
+        },
+        {
+            "type": "text",
+            "text": "A creature of your choice that you can see within range regains hit points equal to 1d4 + your spellcasting ability modifier. This spell has no effect on undead or constructs."
+        }
+    ],
+    "source": "",
+    "rulesVersion": "2024",
+    "page": 110,
+    "id": 2619079,
+    "url": "https://test.com",
+    "isFree": true
+},
+  {
+    "name": "Cure Wounds",
+    "level": 1,
+    "school": "V",
+    "classes": ["Bard", "Cleric", "Druid"],
+    "subclasses": ["Alchemist"],
+    "casttime": "1 bonus action",
+    "range": "60 feet",
+    "components": "V, S",
+    "duration": "Instantaneous",
+    "description": "2014 - A creature of your choice that you can see within range regains hit points equal to 1d4 + your spellcasting ability modifier. This spell has no effect on undead or constructs.",
+    "ritual": false,
+    "higherlevels": "When you cast this spell using a spell slot of 2nd level or higher, the healing increases by 1d4 for each slot level above 1st.",
+    "concentration": false,
+    "automation": [
+        {
+            "type": "target",
+            "target": "each",
+            "effects": [
+                {
+                    "type": "damage",
+                    "damage": "-(1d4+{spell}) [heal]",
+                    "higher": {
+                        "2": "-(1d4) [heal]",
+                        "3": "-(2d4) [heal]",
+                        "4": "-(3d4) [heal]",
+                        "5": "-(4d4) [heal]",
+                        "6": "-(5d4) [heal]",
+                        "7": "-(6d4) [heal]",
+                        "8": "-(7d4) [heal]",
+                        "9": "-(8d4) [heal]"
+                    }
+                }
+            ]
+        },
+        {
+            "type": "text",
+            "text": "A creature of your choice that you can see within range regains hit points equal to 1d4 + your spellcasting ability modifier. This spell has no effect on undead or constructs."
+        }
+    ],
+    "source": "",
+    "rulesVersion": "2014",
+    "page": 110,
+    "id": 2056,
+    "url": "https://test.com",
+    "isFree": true
+}
 ]

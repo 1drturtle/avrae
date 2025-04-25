@@ -51,7 +51,7 @@ class Dice(commands.Cog):
 
         `!r (1d8+4)*2` - Warhammer damage against bludgeoning vulnerability
 
-        `!r 1d10[cold]+2d6[piercing] Ice Knife` - The Ice Knife Spell does cold and piercing damage
+        `!r 1d10[piercing]+2d6[cold] Ice Knife` - The Ice Knife Spell does cold and piercing damage
 
         **Advanced Options**
         __Operators__
@@ -206,7 +206,7 @@ class Dice(commands.Cog):
         {VALID_CHECK_ARGS}
         """,
     )
-    async def monster_check(self, ctx, monster_name, check, *args):
+    async def monster_check(self, ctx, monster_name, check, *, args=""):
         await try_delete(ctx.message)
         monster: Monster = await select_monster_full(ctx, monster_name)
         args = await helpers.parse_snippets(args, ctx, statblock=monster, base_args=[monster_name, check])
@@ -229,7 +229,7 @@ class Dice(commands.Cog):
         {VALID_SAVE_ARGS}
         """,
     )
-    async def monster_save(self, ctx, monster_name, save_stat, *args):
+    async def monster_save(self, ctx, monster_name, save_stat, *, args=""):
         await try_delete(ctx.message)
         monster: Monster = await select_monster_full(ctx, monster_name)
         args = await helpers.parse_snippets(args, ctx, statblock=monster, base_args=[monster_name, save_stat])
@@ -254,7 +254,7 @@ class Dice(commands.Cog):
         {VALID_AUTOMATION_ARGS}
         """,
     )
-    async def monster_cast(self, ctx, monster_name, spell_name, *args):
+    async def monster_cast(self, ctx, monster_name, spell_name, *, args=""):
         await try_delete(ctx.message)
         monster: Monster = await select_monster_full(ctx, monster_name)
         args = await helpers.parse_snippets(args, ctx, statblock=monster, base_args=[monster_name, spell_name])
@@ -262,7 +262,11 @@ class Dice(commands.Cog):
 
         if not args.last("i", type_=bool):
             try:
-                spell = await select_spell_full(ctx, spell_name, list_filter=lambda s: s.name in monster.spellbook)
+                spell = await select_spell_full(
+                    ctx,
+                    spell_name,
+                    list_filter=lambda s: s.name in monster.spellbook,
+                )
             except NoSelectionElements:
                 return await ctx.send(
                     "No matching spells found in the creature's spellbook. Cast again "

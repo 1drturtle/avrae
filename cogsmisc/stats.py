@@ -3,6 +3,7 @@ Created on Jul 17, 2017
 
 @author: andrew
 """
+
 import asyncio
 import datetime
 import time
@@ -25,7 +26,8 @@ class Stats(commands.Cog):
         self.bot = bot
         self.start_time = time.monotonic()
         self.command_stats = Counter()
-        self.bot.loop.create_task(self.scheduled_update())
+        if config.ENVIRONMENT != "development":  # do not run in tests
+            self.bot.loop.create_task(self.scheduled_update())
 
     # ===== listeners =====
     @commands.Cog.listener()
@@ -88,14 +90,12 @@ class Stats(commands.Cog):
         )
         # log event
         guild_id = 0 if ctx.guild is None else ctx.guild.id
-        await self.bot.mdb.analytics_command_events.insert_one(
-            {
-                "timestamp": datetime.datetime.utcnow(),
-                "command_name": ctx.command.qualified_name,
-                "user_id": ctx.author.id,
-                "guild_id": guild_id,
-            }
-        )
+        await self.bot.mdb.analytics_command_events.insert_one({
+            "timestamp": datetime.datetime.utcnow(),
+            "command_name": ctx.command.qualified_name,
+            "user_id": ctx.author.id,
+            "guild_id": guild_id,
+        })
 
     async def update_hourly(self):
         class _ContextProxy:

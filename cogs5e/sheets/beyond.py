@@ -3,6 +3,7 @@ Created on May 26, 2020
 
 @author: andrew
 """
+
 import itertools
 import logging
 import re
@@ -24,17 +25,19 @@ from cogs5e.models.sheet.spellcasting import Spellbook, SpellbookSpell
 from cogs5e.sheets.abc import SHEET_VERSION, SheetLoaderABC
 from gamedata.compendium import compendium
 from utils import config, constants, enums
+from utils.enums import ActivationType
 from utils.functions import smart_trim
 
 log = logging.getLogger(__name__)
 
 ENDPOINT = config.DDB_CHAR_COMPUTATION_ENDPT
 if config.ENVIRONMENT in ("development", "staging"):
-    DDB_URL_RE = re.compile(
-        r"(?:https?://)?(?:stg\.dndbeyond\.com|www\.dndbeyond\.com|ddb\.ac)(?:/profile/.+)?/characters/(\d+)/?"
-    )
+    urls = r"stg\.dndbeyond\.com|www\.dndbeyond\.com|ddb\.ac"
 else:
-    DDB_URL_RE = re.compile(r"(?:https?://)?(?:www\.dndbeyond\.com|ddb\.ac)(?:/profile/.+)?/characters/(\d+)/?")
+    urls = r"www\.dndbeyond\.com|ddb\.ac"
+
+DDB_URL_RE = re.compile(rf"(?:https?://)?(?:{urls})(?:/profile/.+)?/characters/(\d+)(?:/)?")
+DDB_PDF_URL_RE = re.compile(rf"(?:https?://)?(?:{urls})/sheet-pdfs/.+_(\d+).pdf")
 SKILL_MAP = {
     "3": "acrobatics",
     "11": "animalHandling",
@@ -159,7 +162,7 @@ class BeyondSheetParser(SheetLoaderABC):
             headers = {"Authorization": f"Bearer {ddb_user.token}"}
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"{ENDPOINT}?charId={char_id}", headers=headers) as resp:
+            async with session.get(f"{ENDPOINT}{char_id}", headers=headers) as resp:
                 log.debug(f"DDB returned {resp.status}")
                 if resp.status == 200:
                     character = await resp.json()
@@ -171,13 +174,16 @@ class BeyondSheetParser(SheetLoaderABC):
                     else:
                         raise ExternalImportError("You do not have permission to view this character.")
                 elif resp.status == 404:
-                    raise ExternalImportError("This character does not exist. Are you using the right link?")
+                    raise ExternalImportError(
+                        "This character does not exist, or you do not have access to it. Are you using the right link?"
+                    )
                 elif resp.status == 429:
                     raise ExternalImportError(
                         "Too many people are trying to import characters! Please try again in a few minutes."
                     )
                 else:
                     raise ExternalImportError(f"Beyond returned an error: {resp.status} - {resp.reason}")
+
         character["_id"] = char_id
         self.character_data = character
         self._is_live = (ddb_user is not None) and (ddb_user.user_id == str(character["ownerId"]))
@@ -260,7 +266,7 @@ class BeyondSheetParser(SheetLoaderABC):
         dcs = []
         sabs = []
         mods = []
-        spells = []
+        spells = {}
 
         for spell in spellbook["spells"]:
             spell_ab = spell["sab"]
@@ -277,15 +283,31 @@ class BeyondSheetParser(SheetLoaderABC):
             result = compendium.lookup_entity(gamedata.Spell.entity_type, spell["id"])
 
             if result:
-                spells.append(
-                    SpellbookSpell.from_spell(result, sab=spell_ab, dc=spell_dc, mod=spell_mod, prepared=spell_prepared)
+                spell_info = SpellbookSpell.from_spell(
+                    result, sab=spell_ab, dc=spell_dc, mod=spell_mod, prepared=spell_prepared
                 )
+                if result.name not in spells:
+                    spells[result.name] = spell_info
+
+                elif spell_prepared:  # prioritize prepared spells
+                    if spells[result.name].prepared:
+                        if spell_info.dc and spells[result.name].dc:
+                            spells[result.name] = max(spell_info, spells[result.name], key=lambda x: x.dc)
+                        elif spell_info.sab and spells[result.name].sab:
+                            spells[result.name] = max(spell_info, spells[result.name], key=lambda x: x.sab)
+                        elif spell_info.mod and spells[result.name].mod:
+                            spells[result.name] = max(spell_info, spells[result.name], key=lambda x: x.mod)
+
+                    if not spells[result.name].prepared:
+                        spells[result.name] = spell_info
+
             else:
-                spells.append(
-                    SpellbookSpell(
-                        spell["name"].strip(), sab=spell_ab, dc=spell_dc, mod=spell_mod, prepared=spell_prepared
-                    )
+                spell_info = SpellbookSpell(
+                    spell["name"].strip(), sab=spell_ab, dc=spell_dc, mod=spell_mod, prepared=spell_prepared
                 )
+                spells[spell_info.name] = spell_info
+
+        spells = list(spells.values())
 
         dc = max(dcs, key=dcs.count, default=None)
         sab = max(sabs, key=sabs.count, default=None)
@@ -398,7 +420,7 @@ class BeyondSheetParser(SheetLoaderABC):
                 num = 2
                 while f"{processed_attack.name}{num}" in used_names:
                     num += 1
-                processed_attack.name = f"{processed_attack.name}{num}"
+                processed_attack.name = f"{processed_attack.name} {num}"
             attacks.append(((str(attack_data["id"]), str(attack_data["typeId"])), processed_attack))
             used_names.add(processed_attack.name)
 
@@ -509,6 +531,13 @@ class BeyondSheetParser(SheetLoaderABC):
     def _transform_attack(attack) -> Attack:
         desc = html_to_md(attack["desc"])
 
+        activation = attack.get("activationType")
+        # Attack's are listed as Actions on Beyond, and this was the default prior
+        if activation == 1:
+            activation = None
+        if activation is not None:
+            activation = ActivationType(activation)
+
         if attack["saveDc"] is not None and attack["saveStat"] is not None:
             stat = constants.STAT_ABBREVIATIONS[attack["saveStat"] - 1]
             for_half = desc and "half" in desc
@@ -531,10 +560,11 @@ class BeyondSheetParser(SheetLoaderABC):
             # description text
             if desc:
                 effects.append(automation.Text(desc))
-
-            return Attack(attack["name"], automation.Automation(effects))
+            return Attack(attack["name"], automation.Automation(effects), activation_type=activation)
         else:
-            return Attack.new(attack["name"], attack["toHit"], attack["damage"] or "0", desc)
+            return Attack.new(
+                attack["name"], attack["toHit"], attack["damage"] or "0", desc, activation_type=activation
+            )
 
 
 def derive_adv(advs, dises):

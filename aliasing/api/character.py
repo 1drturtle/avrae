@@ -172,6 +172,8 @@ class AliasCharacter(AliasStatBlock):
             self._character.consumables.append(new_consumable)
             self._consumables = None  # reset cache
             return AliasCustomCounter(new_consumable)
+        else:
+            return self.cc(name)
 
     def create_cc(self, name: str, *args, **kwargs):
         """
@@ -181,9 +183,9 @@ class AliasCharacter(AliasStatBlock):
         :param str minVal: The minimum value of the counter. Supports :ref:`cvar-table` parsing.
         :param str maxVal: The maximum value of the counter. Supports :ref:`cvar-table` parsing.
         :param str reset: One of ``'short'``, ``'long'``, ``'hp'``, ``'none'``, or ``None``.
-        :param str dispType: Either ``None`` or ``'bubble'``.
+        :param str dispType: Either ``None``, ``'bubble'``, ``'square'``, ``'hex'``, or ``'star'``.
         :param str reset_to: The value the counter should reset to. Supports :ref:`cvar-table` parsing.
-        :param str reset_by: How much the counter should change by on a reset. Supports dice but not cvars.
+        :param str reset_by: How much the counter should change by on a reset. Supports annotated dice strings.
         :param str title: The title of the counter.
         :param str desc: The description of the counter.
         :param str initial_value: The initial value of the counter.
@@ -217,9 +219,9 @@ class AliasCharacter(AliasStatBlock):
         :param str minVal: The minimum value of the counter. Supports :ref:`cvar-table` parsing.
         :param str maxVal: The maximum value of the counter. Supports :ref:`cvar-table` parsing.
         :param str reset: One of ``'short'``, ``'long'``, ``'hp'``, ``'none'``, or ``None``.
-        :param str dispType: Either ``None`` or ``'bubble'``.
+        :param str dispType: Either ``None``, ``'bubble'``, ``'square'``, ``'hex'``, or ``'star'``.
         :param str reset_to: The value the counter should reset to. Supports :ref:`cvar-table` parsing.
-        :param str reset_by: How much the counter should change by on a reset. Supports dice but not cvars.
+        :param str reset_by: How much the counter should change by on a reset. Supports annotated dice strings.
         :param str title: The title of the counter.
         :param str desc: The description of the counter.
         :param str new_name: The new name of the counter.
@@ -387,7 +389,7 @@ class AliasCharacter(AliasStatBlock):
     @property
     def sheet_type(self):
         """
-        Returns the sheet type of this character (beyond, dicecloud, google).
+        Returns the sheet type of this character (beyond, dicecloud, dicecloudv2, google).
 
         :rtype: str
         """
@@ -527,7 +529,7 @@ class AliasCustomCounter:
     @property
     def display_type(self):
         """
-        Returns the cc's display type. (None, 'bubble')
+        Returns the cc's display type. (None, 'bubble', 'square', 'hex', or 'star')
 
         :rtype: str
         """
@@ -550,7 +552,18 @@ class AliasCustomCounter:
         :return: The amount the cc changes by. Guaranteed to be a rollable string.
         :rtype: str or None
         """
-        return self._cc.reset_by
+        return self._cc.get_reset_by()
+
+    def mod(self, value, strict=False):
+        """
+        Modifies the value of the custom counter.
+
+        :param int value: The value to modify the custom counter by.
+        :param bool strict: Whether to error when going out of bounds (true) or to clip silently (false).
+        :return: The cc's new value.
+        :rtype: int
+        """
+        return self.set(self.value + value, strict)
 
     def set(self, new_value, strict=False):
         """
@@ -731,9 +744,9 @@ class AliasAction:
         | Lair Action      | 11    |
         +------------------+-------+
 
-        :rtype: int
+        :rtype: int or None
         """
-        return self._action.activation_type.value
+        return self._action.activation_type.value if self._action.activation_type is not None else None
 
     @property
     def activation_type_name(self):
@@ -789,7 +802,7 @@ class AliasCoinpurse:
 
     def __getattr__(self, item):
         if item not in COIN_TYPES:
-            raise ValueError(f"{item} is not valid coin.")
+            raise AttributeError(f"{item} is not valid coin.")
         return getattr(self._coinpurse, item)
 
     def __getitem__(self, item):

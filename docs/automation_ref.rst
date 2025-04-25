@@ -40,6 +40,7 @@ All Automation runs provide the following variables:
   targeted by this automation (i.e. the ``-t`` argument).
 - ``spell_attack_bonus`` (:class:`int` or None) - The attack bonus for the spell, or the caster's default attack bonus.
 - ``spell_dc`` (:class:`int` or None) - The DC for the spell, or the caster's default DC.
+- ``spell_level`` (:class:`int` or None) - The level used to cast the spell, or None
 - ``choice`` (:class:`str`) - The input provided by the ``-choice`` argument, always lowercase. If the arg was not used, it will be an empty string.
 
 Additionally, runs triggered by an initiative effect (such as automation provided in a :ref:`ButtonInteraction`) provide
@@ -57,6 +58,7 @@ Target
         target: "all" | "each" | int | "self" | "parent" | "children";
         effects: Effect[];
         sortBy?: "hp_asc" | "hp_desc";
+        self_target?: boolean;
     }
 
 A Target effect should only show up as a top-level effect.
@@ -205,6 +207,7 @@ Damage
         overheal?: boolean;
         higher?: {int: string};
         cantripScale?: boolean;
+        fixedValue?: boolean;
     }
 
 Deals damage to or heals a targeted creature. It must be inside a Target effect.
@@ -232,6 +235,10 @@ Deals damage to or heals a targeted creature. It must be inside a Target effect.
     .. attribute:: cantripScale
 
         *optional* - Whether this roll should scale like a cantrip.
+
+    .. attribute:: fixedValue
+
+        *optional* - If ``true``, won't add any bonuses to damage from ``-d`` arguments or damage bonus effects.
 
 **Variables**
 
@@ -274,7 +281,7 @@ IEffect
 
     {
         type: "ieffect2";
-        name: string;
+        name: AnnotatedString;
         duration?: int | IntExpression;
         effects?: PassiveEffects;
         attacks?: AttackInteraction[];
@@ -285,6 +292,8 @@ IEffect
         stacking?: boolean;
         save_as?: string;
         parent?: string;
+        target_self?: boolean;
+        tick_on_caster?: boolean;
     }
 
 Adds an InitTracker Effect to a targeted creature, if the automation target is in combat.
@@ -299,12 +308,22 @@ It must be inside a Target effect.
 
     .. attribute:: name
 
-        The name of the effect to add.
+        The name of the effect to add. Annotations will show as *Variable* in the attack string.
 
     .. attribute:: duration
 
         *optional, default infinite* - The duration of the effect, in rounds of combat. If this is negative, creates an
         effect with infinite duration.
+
+        .. note::
+
+            **Wait, how do durations actually work?**
+
+            Durations use a "tick" system, and ``duration`` is actually a measure of how many "ticks" an effect sticks
+            around for. By default, each effect "ticks" once at the beginning of its combatant's turn.
+
+            By using ``end`` and ``tick_on_caster``, you can control how the duration ticks in order to create effects
+            that last until the end of your next turn, end of the caster's next turn, etc.
 
     .. attribute:: effects
 
@@ -353,6 +372,19 @@ It must be inside a Target effect.
         If ``stacking`` is true and a valid stack parent exists, the stack parent will take priority over the given
         parent.
 
+    .. attribute:: target_self
+
+        *optional, default false* - If true, the effect will be applied to the caster of the action, rather than the
+        target.
+
+    .. attribute:: tick_on_caster
+
+        *optional, default false* - If true, the effect's duration will be dependent on the caster of the action, rather
+        than the target. For example, a ``tick_on_caster`` effect with a duration of 1 will last until the start of the
+        *caster's* next turn, rather than the *target's*.
+
+        If the caster is not in combat, this has no effect.
+
 **Variables**
 
 - ``(supplied save_as)`` (:class:`IEffectMetaVar` or ``None``) A reference to the effect that was added to the target.
@@ -385,6 +417,7 @@ PassiveEffects
         check_bonus: AnnotatedString;
         check_adv: AnnotatedString[];
         check_dis: AnnotatedString[];
+        dc_bonus: IntExpression;
     }
 
 Used to specify the passive effects granted by an initiative effect.
@@ -493,6 +526,10 @@ Used to specify the passive effects granted by an initiative effect.
         disadvantage on for ability checks for while this effect is active. If a base ability is given, the disadvantage
         will apply to all skills based on that ability (e.g. ``strength`` gives disadvantage on ``athletics`` checks).
         Use ``all`` as a stat name to specify all skills.
+
+    .. attribute:: dc_bonus
+
+        *optional* - A bonus added to the all of the combatant's save DCs while this effect is active.
 
 .. _attackinteraction:
 
@@ -643,6 +680,7 @@ Roll
         cantripScale?: boolean;
         hidden?: boolean;
         displayName?: string;
+        fixedValue?: boolean;
     }
 
 Rolls some dice and saves the result in a variable. Displays the roll and its name in a Meta field, unless
@@ -675,6 +713,11 @@ Rolls some dice and saves the result in a variable. Displays the roll and its na
 
         The name to display in the Meta field. If left blank, it will use the saved name.
 
+    .. attribute:: fixedValue
+
+        *optional* - If ``true``, won't add any bonuses to damage from ``-d`` arguments or damage bonus effects.
+
+
 **Variables**
 
 - ``(supplied name)`` (:class:`RollEffectMetaVar`) The result of the roll.
@@ -691,6 +734,7 @@ Text
     {
         type: "text";
         text: AnnotatedString | AbilityReference;
+        title: string
     }
 
 Outputs a short amount of text in the resulting embed.
@@ -703,6 +747,10 @@ Outputs a short amount of text in the resulting embed.
 
         - An AnnotatedString (the text to display).
         - An AbilityReference (see :ref:`AbilityReference`). Displays the ability's description in whole.
+
+    .. attribute:: title
+
+        *optional* - Allows you to set the name of the field. Defaults to "Effect"
 
 .. _set-variable:
 
@@ -773,7 +821,7 @@ Run certain effects if a certain condition is met, or other effects otherwise. A
 
     .. attribute:: errorBehaviour
 
-        How to behave if the condition raises an error:
+        *optional* - How to behave if the condition raises an error:
 
         - ``"true"``: Run the ``onTrue`` effects.
         - ``"false"``: Run the ``onFalse`` effects. (*default*)
@@ -793,6 +841,7 @@ Use Counter
         amount: IntExpression;
         allowOverflow?: boolean;
         errorBehaviour?: "warn" | "raise" | "ignore";
+        fixedValue?: boolean;
     }
 
 Uses a number of charges of the given counter, and displays the remaining amount and delta.
@@ -829,6 +878,10 @@ Uses a number of charges of the given counter, and displays the remaining amount
         - The target does not have counters (e.g. they are a monster)
         - The counter does not exist
         - ``allowOverflow`` is false and the new value is out of bounds
+
+    .. attribute:: fixedValue
+
+        *optional* - If ``true``, won't take into account ``-amt`` arguments.
 
 **Variables**
 
@@ -1424,6 +1477,7 @@ Custom Attack Structure
         thumb?: string;
         extra_crit_damage?: string;
         activation_type?: number;
+        list_display_override?: AnnotatedString;
     }
 
 In order to use Automation, it needs to be contained within a custom attack or spell. We recommend building these on
@@ -1473,6 +1527,12 @@ Hand-written custom attacks may be written in JSON or YAML and imported using th
         doubling damage dice. For example, if this attack normally deals 1d6 damage with ``extra_crit_damage: "1d8"``,
         it will deal 2d6 + 1d8 damage on a crit.
 
+    .. attribute:: list_display_override
+        
+        *optional* - The display text to display in the action list (such as ``!a list`` ).
+
+        ``caster`` (:class:`~aliasing.api.statblock.AliasStatBlock)` is available in this attribute.
+
     .. attribute:: activation_type
 
         *optional* - What action type to display this attack as in an action list (such as ``!a list``).
@@ -1490,20 +1550,15 @@ Hand-written custom attacks may be written in JSON or YAML and imported using th
             MYTHIC = 10
             LAIR = 11
 
+.. _class_feature_dc_impl:
 
 Specifying Class Feature DC Bonuses
--------------
+----------------------------------------
 .. versionadded:: 4.1.0
 
-You can grant bonuses to your class Saving Throw DCs by creating a cvar: ``XDCBonus`` (``WarlockDCBonus``, ``BloodHunterDCBonus``, ``MonkDCBonus``, etc).
+Many official class automations let you specify a DC bonus that is added to the class feature's DC. For example, to add a bonus to all of your Fighter's Battlemaster Maneuvers, you can set a ``FighterDCBonus`` cvar and add it to the DC of all of your maneuvers.
 
-This is to account for items such as the Dragonhide Belt, which adds a flat +1/2/3 bonus to the save DC for your class.
-
-.. note::
-    ``XDCBonus`` is not generated by the the sheet itself, but is instead set by the user. It will grant the given bonus to the save DC of actions for that class.
-    You can set it with ``!cvar XDCBonus #``, such as ``!cvar MonkDCBonus 2``, or with Draconic using :meth:`~aliasing.api.AliasCharacter.set_cvar`.
-
-    This cvar should be an integer, or it could cause the automation to not run.
+For more details on using this, see :any:`class_feature_dc`
 
 To account for this in your automations, use the :ref:`set-variable` node, with a value of ``XDCBonus`` and an onError of 0.
 

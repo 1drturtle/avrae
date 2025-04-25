@@ -72,8 +72,7 @@ class Spellbook:
             pact_slot_bubbles = bubble_format(
                 self.num_pact_slots,
                 self.max_pact_slots,
-                used_char=constants.EMPTY_BUBBLE_ALT,
-                unused_char=constants.FILLED_BUBBLE_ALT,
+                chars=constants.COUNTER_BUBBLES["square"],
             )
             return f"`{level}` {nonpact_slot_bubbles}{pact_slot_bubbles}"
 
@@ -239,7 +238,7 @@ class SpellbookSpell:
         self.prepared = prepared
 
     @classmethod
-    def from_spell(cls, spell, dc=None, sab=None, mod=None, prepared=True):
+    def from_spell(cls, spell, dc=None, sab=None, mod=None, prepared=True, version="2024"):
         strict = spell.source != "homebrew"
         return cls(spell.name, strict, spell.level, dc, sab, mod, prepared)
 

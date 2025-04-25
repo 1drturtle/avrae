@@ -1,9 +1,14 @@
 import os
 import sys
 
+# This method will load the variables from .env into the environment for running in local
+# from dotenv import load_dotenv
+# load_dotenv()
+
+
 # ==== bot config constants / env vars ====
 TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "")
-TESTING = os.environ.get("TESTING") or "test" in sys.argv
+TESTING = bool(os.environ.get("TESTING")) or "test" in sys.argv
 ENVIRONMENT = os.getenv("ENVIRONMENT", "production" if not TESTING else "development")
 GIT_COMMIT_SHA = os.getenv("GIT_COMMIT_SHA")
 NUM_CLUSTERS = int(os.getenv("NUM_CLUSTERS")) if "NUM_CLUSTERS" in os.environ else None
@@ -24,7 +29,6 @@ REDIS_DB_NUM = int(os.getenv("REDIS_DB_NUM", 0))
 DEFAULT_PREFIX = os.getenv("DEFAULT_PREFIX", "!")
 
 # ---- monitoring ----
-SENTRY_DSN = os.getenv("SENTRY_DSN")
 DD_SERVICE = os.getenv("DD_SERVICE")
 
 # ---- character sheets ---
@@ -32,6 +36,11 @@ NO_DICECLOUD = os.environ.get("NO_DICECLOUD", "DICECLOUD_USER" not in os.environ
 DICECLOUD_USER = os.getenv("DICECLOUD_USER")
 DICECLOUD_PASS = os.getenv("DICECLOUD_PASS", "").encode()
 DICECLOUD_API_KEY = os.getenv("DICECLOUD_TOKEN")
+
+DCV2_NO_AUTH = os.getenv("DCV2_NO_AUTH", "DICECLOUDV2_USER" not in os.environ)
+NO_DICECLOUDV2 = os.environ.get("NO_DICECLOUDV2")
+DICECLOUDV2_USER = os.getenv("DICECLOUDV2_USER")
+DICECLOUDV2_PASS = os.getenv("DICECLOUDV2_PASS", "")
 
 GOOGLE_SERVICE_ACCOUNT = os.getenv("GOOGLE_SERVICE_ACCOUNT")  # optional - if not supplied, uses avrae-google.json
 
@@ -59,7 +68,7 @@ DDB_GAMELOG_ENDPOINT = os.getenv("DDB_GAMELOG_ENDPOINT", "https://game-log-rest-
 DDB_CHARACTER_SERVICE_URL = os.getenv(
     "DDB_CHARACTER_SERVICE_URL", "https://character-service.dndbeyond.com/character/v5"
 )
-DDB_SCDS_SERVICE_URL = os.getenv("DDB_SCDS_SERVICE_URL", "https://character-service-scds.dndbeyond.com/v1")
+DDB_SCDS_SERVICE_URL = os.getenv("DDB_SCDS_SERVICE_URL", "https://character-service-scds.dndbeyond.com/v2")
 DDB_MEDIA_S3_BUCKET_DOMAIN = os.getenv("DDB_MEDIA_S3_BUCKET_DOMAIN", "www.dndbeyond.com")  # used for !token
 
 # ---- launchdarkly ----

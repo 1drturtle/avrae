@@ -71,6 +71,13 @@ class Save(Effect):
 
         if dc is None:
             raise NoSpellDC("No spell save DC found. Use the `-dc` argument to specify one!")
+
+        # dc effects
+        bonus_effect_dc = autoctx.caster_active_effects(
+            mapper=lambda effect: effect.effects.dc_bonus, reducer=sum, default=0
+        )
+        dc += bonus_effect_dc
+
         try:
             save_skill = next(
                 s

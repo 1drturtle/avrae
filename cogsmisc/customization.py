@@ -3,6 +3,7 @@ Created on Jan 30, 2017
 
 @author: andrew
 """
+
 import asyncio
 import io
 import re
@@ -141,13 +142,98 @@ class CollectableManagementGroup(commands.Group):
         kwargs.setdefault("checks", self.checks)  # inherit all checks of parent command
         return super().command(*args, **kwargs)
 
+    def quotations_check(self, name: str) -> bool:
+        """
+        Validates quotation marks in an alias name.
+
+        Rules:
+        - Quotation marks, if present, must wrap the entire alias (i.e., at the beginning and end).
+        - If an opening quotation is found at the start, a corresponding closing quotation must be at the end.
+        - No quotation marks are allowed inside the alias unless they are part of the wrapping pair.
+
+        Valid Examples:
+            - alias "name"
+            - alias name
+
+        Invalid Examples:
+            - alias nam"e (Quote inside the name)
+            - alias name" (Unmatched closing quote)
+            - alias "name (Unmatched opening quote)
+            - alias "some'thing" (Invalid quote inside a quoted alias)
+
+        :param name: The alias name to validate.
+        :return: True if the alias follows the quotation rules, False otherwise.
+        """
+
+        if not name:
+            return False
+
+        _quotes = {
+            '"': '"',
+            "‘": "’",
+            "‚": "‛",
+            "“": "”",
+            "„": "‟",
+            "⹂": "⹂",
+            "「": "」",
+            "『": "』",
+            "〝": "〞",
+            "﹁": "﹂",
+            "﹃": "﹄",
+            "＂": "＂",
+            "｢": "｣",
+            "«": "»",
+            "‹": "›",
+            "《": "》",
+            "〈": "〉",
+        }
+
+        _all_quotes = set(_quotes.keys()) | set(_quotes.values())
+
+        first_char, last_char = name[0], name[-1]
+
+        if first_char in _quotes:
+            closing_quote = _quotes[first_char]
+
+            # Ensure closing quote is at the end and no other quotes exist inside
+            return last_char == closing_quote and all(c not in _all_quotes for c in name[1:-1])
+
+        # If not quoted, just ensure no misplaced quotes in the middle
+        return all(c not in _all_quotes for c in name)
+
     # noinspection PyUnusedLocal
     # d.py passes the cog in as the first argument (which is weird for this custom case)
-    async def create_or_view(self, cog, ctx, name=None, *, code=None):
-        if name is None:
+    async def create_or_view(self, *args, **kwargs):
+        """
+        Handles alias creation and viewing, depending on the user input.
+
+        Function Behavior:
+        - If only `!alias` is used, it lists all available aliases.
+        - If a valid alias name is provided but no code, it displays the alias content.
+        - If an alias name and code are provided, it creates or updates the alias.
+
+        :param args: Can contain `[cog, ctx]` or just `[ctx]`, depending on how Disnake passes arguments.
+        """
+
+        # Due to Disnake’s internal implementation, `args` may contain:
+        # - [cog, ctx] → when called as a cog method
+        # - [ctx] → when called as a standalone function
+        ctx = args[1] if len(args) > 1 else args[0]
+        content = ctx.message.content
+        content_array = content.split(" ")
+
+        # If the command is just `!alias` (without additional arguments), list aliases.
+        if not len(content_array) > 1:
             return await self.list(ctx)
 
-        if code is None:
+        name = content_array[1]
+        if not self.quotations_check(name):
+            raise Exception(f"Unexpected quote mark on {name}")
+
+        code = " ".join(content_array[2:])
+
+        # If only the alias name is provided, view its contents instead of creating it.
+        if not code:
             return await self._view(ctx, name)
 
         if self.before_edit_check:
@@ -224,13 +310,14 @@ class CollectableManagementGroup(commands.Group):
 
         # build the resulting embed
         if collections:
+            amt_per_page = 20
             total = len(collections)
-            maxpage = ceil(total / 25)
+            maxpage = ceil(total / amt_per_page)
             page = max(1, min(page, maxpage))
-            pages = [collections[i : i + 25] for i in range(0, total, 25)]
+            pages = [collections[i : i + amt_per_page] for i in range(0, total, amt_per_page)]
             for name, bindings_str in pages[page - 1]:
                 ep.add_field(name, bindings_str)
-            if total > 25:
+            if total > amt_per_page:
                 ep.set_footer(value=f"Page [{page}/{maxpage}] | {ctx.prefix}{self.command_group_name} list <page>")
         else:
             ep.add_description(
@@ -357,12 +444,14 @@ class CollectableManagementGroup(commands.Group):
         changes = "\n".join([f"`{old}` ({collection}) -> `{new}`" for old, new, collection in rename_tris])
         response = await confirm(
             ctx,
-            f"This will rename {len(rename_tris)} {self.obj_name_pl}. "
-            "Do you want to continue? (Reply with yes/no)\n"
-            f"{changes}",
+            (
+                f"This will rename {len(rename_tris)} {self.obj_name_pl}. "
+                "Do you want to continue? (Reply with yes/no)\n"
+                f"{changes}"
+            ),
         )
         if not response:
-            return await ctx.send("Ok, aborting.")
+            return await ctx.send("Ok, cancelling.")
 
         # execute the pending changes
         await asyncio.gather(*to_do)
@@ -426,12 +515,14 @@ class CollectableManagementGroup(commands.Group):
             collection = personal_obj.collection
             response = await confirm(
                 ctx,
-                f"This action will subscribe the server to the `{collection.name}` workshop collection, found at "
-                f"<{collection.url}>. This will add {collection.alias_count} aliases and "
-                f"{collection.snippet_count} snippets to the server. Do you want to continue? (Reply with yes/no)",
+                (
+                    f"This action will subscribe the server to the `{collection.name}` workshop collection, found at "
+                    f"<{collection.url}>. This will add {collection.alias_count} aliases and "
+                    f"{collection.snippet_count} snippets to the server. Do you want to continue? (Reply with yes/no)"
+                ),
             )
             if not response:
-                return await ctx.send("Ok, aborting.")
+                return await ctx.send("Ok, cancelling.")
             await collection.set_server_active(ctx)  # this loads the aliases/snippets
 
             embed = EmbedWithAuthor(ctx)
@@ -455,8 +546,10 @@ class CollectableManagementGroup(commands.Group):
         # check if it overwrites anything
         if existing_server_obj is not None and not await confirm(
             ctx,
-            f"There is already an existing server {self.obj_name} named `{name}`. Do you want to overwrite it? "
-            "(Reply with yes/no)",
+            (
+                f"There is already an existing server {self.obj_name} named `{name}`. Do you want to overwrite it? "
+                "(Reply with yes/no)"
+            ),
         ):
             return await ctx.send("Ok, aborting.")
 
@@ -583,15 +676,19 @@ class Customization(commands.Cog):
         if prefix.startswith("/"):
             if not await confirm(
                 ctx,
-                "Setting a prefix that begins with / may cause issues. "
-                "Are you sure you want to continue? (Reply with yes/no)",
+                (
+                    "Setting a prefix that begins with / may cause issues. "
+                    "Are you sure you want to continue? (Reply with yes/no)"
+                ),
             ):
                 return await ctx.send("Ok, cancelling.")
         else:
             if not await confirm(
                 ctx,
-                f"Are you sure you want to set my prefix to `{prefix}`? This will affect "
-                "everyone on this server! (Reply with yes/no)",
+                (
+                    f"Are you sure you want to set my prefix to `{prefix}`? This will affect "
+                    "everyone on this server! (Reply with yes/no)"
+                ),
             ):
                 return await ctx.send("Ok, cancelling.")
 
@@ -648,9 +745,11 @@ class Customization(commands.Cog):
         """Deletes ALL user aliases."""
         if not await confirm(
             ctx,
-            f"This will delete **ALL** of your personal user aliases (it will not affect workshop subscriptions). "
-            f"Are you *absolutely sure* you want to continue?\n"
-            f"Type `Yes, I am sure` to confirm.",
+            (
+                "This will delete **ALL** of your personal user aliases (it will not affect workshop subscriptions). "
+                "Are you *absolutely sure* you want to continue?\n"
+                "Type `Yes, I am sure` to confirm."
+            ),
             response_check=lambda r: r == "Yes, I am sure",
         ):
             return await ctx.send("Unconfirmed. Aborting.")
@@ -701,9 +800,11 @@ class Customization(commands.Cog):
         """Deletes ALL user snippets."""
         if not await confirm(
             ctx,
-            f"This will delete **ALL** of your personal user snippets (it will not affect workshop subscriptions). "
-            f"Are you *absolutely sure* you want to continue?\n"
-            f"Type `Yes, I am sure` to confirm.",
+            (
+                "This will delete **ALL** of your personal user snippets (it will not affect workshop subscriptions). "
+                "Are you *absolutely sure* you want to continue?\n"
+                "Type `Yes, I am sure` to confirm."
+            ),
             response_check=lambda r: r == "Yes, I am sure",
         ):
             return await ctx.send("Unconfirmed. Aborting.")
@@ -731,7 +832,9 @@ class Customization(commands.Cog):
 
     @commands.command()
     async def test(self, ctx, *, teststr):
-        """Parses `str` as if it were in an alias, for testing."""
+        """Parses `teststr` as if it were in an alias, for testing.
+        Note: Not recommended to be used in actual aliases, as it can lead to unexpected behaviour. You will probably want to use `!echo` instead.
+        """
         try:
             char = await ctx.get_character()
         except NoCharacter:
@@ -747,7 +850,9 @@ class Customization(commands.Cog):
 
     @commands.command()
     async def tembed(self, ctx, *, teststr):
-        """Parses `str` as if it were in an alias, for testing, then creates and prints an Embed.
+        """Parses `teststr` as if it were in an alias, for testing, then creates and prints an Embed.
+        Note: Not recommended to be used in actual aliases, as it can lead to unexpected behaviour. You will probably want to use `!embed` instead.
+
         Arguments: -title [title]
         -desc [description text]
         -thumb [image url]
@@ -788,7 +893,9 @@ class Customization(commands.Cog):
             cvar = character.get_scope_locals().get(name)
             if cvar is None:
                 return await ctx.send("This cvar is not defined.")
-            return await send_long_code_text(ctx, outside_codeblock=f"**{name}**:", inside_codeblock=cvar)
+            return await send_long_code_text(
+                ctx, outside_codeblock=f"**{name}**:".replace("_", r"\_"), inside_codeblock=cvar
+            )
 
         helpers.set_cvar(character, name, value)
 
@@ -813,9 +920,11 @@ class Customization(commands.Cog):
         char: Character = await ctx.get_character()
         if not await confirm(
             ctx,
-            f"This will delete **ALL** of your character variables for {char.name}. "
-            "Are you *absolutely sure* you want to continue?\n"
-            "Type `Yes, I am sure` to confirm.",
+            (
+                f"This will delete **ALL** of your character variables for {char.name}. "
+                "Are you *absolutely sure* you want to continue?\n"
+                "Type `Yes, I am sure` to confirm."
+            ),
             response_check=lambda r: r == "Yes, I am sure",
         ):
             return await ctx.send("Unconfirmed. Aborting.")
@@ -830,7 +939,9 @@ class Customization(commands.Cog):
         """Lists all cvars for the currently active character."""
         character: Character = await ctx.get_character()
         await ctx.send(
-            "{}'s character variables:\n{}".format(character.name, ", ".join(sorted(character.cvars.keys())))
+            "{}'s character variables:\n{}".format(character.name, ", ".join(sorted(character.cvars.keys()))).replace(
+                "_", r"\_"
+            )
         )
 
     @commands.group(invoke_without_command=True, aliases=["uvar"])
@@ -876,9 +987,11 @@ class Customization(commands.Cog):
         """Deletes ALL user variables."""
         if not await confirm(
             ctx,
-            f"This will delete **ALL** of your user variables (uvars). "
-            f"Are you *absolutely sure* you want to continue?\n"
-            f"Type `Yes, I am sure` to confirm.",
+            (
+                "This will delete **ALL** of your user variables (uvars). "
+                "Are you *absolutely sure* you want to continue?\n"
+                "Type `Yes, I am sure` to confirm."
+            ),
             response_check=lambda r: r == "Yes, I am sure",
         ):
             return await ctx.send("Unconfirmed. Aborting.")
@@ -1046,11 +1159,21 @@ class Customization(commands.Cog):
 
     @commands.command(aliases=["servsettings"])
     @commands.guild_only()
-    @checks.admin_or_permissions(manage_guild=True)
     async def server_settings(self, ctx):
-        """Opens the server settings menu. You must have *Manage Server* permissions to use this command."""
+        """Opens the server settings menu. You must have *Manage Server* permissions to edit any settings here"""
         guild_settings = await ctx.get_server_settings()
-        settings_ui = ui.ServerSettingsUI.new(ctx.bot, owner=ctx.author, settings=guild_settings, guild=ctx.guild)
+        try:
+            readonly = not await checks.admin_or_permissions(manage_guild=True).predicate(ctx)
+        except commands.CheckFailure:
+            readonly = True
+
+        settings_ui = ui.ServerSettingsUI.new(
+            ctx.bot,
+            owner=ctx.author,
+            settings=guild_settings,
+            guild=ctx.guild,
+            readonly=readonly,
+        )
         await settings_ui.send_to(ctx)
 
     # temporary commands to aid testers with lack of dashboard

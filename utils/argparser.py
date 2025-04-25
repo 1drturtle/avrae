@@ -1,6 +1,7 @@
 import collections
 import itertools
 import re
+import string
 from typing import Iterator
 
 from disnake.ext.commands import BadArgument, ExpectedClosingQuoteError
@@ -149,13 +150,16 @@ class ParsedArguments:
         return cls([])
 
     # basic argument getting
+
+    # Have to escape the _ in the type_ parameter for docs
+    # noinspection PyIncorrectDocstring
     def get(self, arg, default=None, type_=str, ephem=False):
-        """
+        r"""
         Gets a list of all values of an argument.
 
         :param str arg: The name of the arg to get.
         :param default: The default value to return if the arg is not found. Not cast to type.
-        :param type type_: The type that each value in the list should be returned as.
+        :param type type\_: The type that each value in the list should be returned as.
         :param bool ephem: Whether to add applicable ephemeral arguments to the returned list.
         :return: The relevant argument list.
         :rtype: list
@@ -170,13 +174,15 @@ class ParsedArguments:
         except (ValueError, TypeError):
             raise InvalidArgument(f"One or more arguments cannot be cast to {type_.__name__} (in `{arg}`)")
 
+    # Have to escape the _ in the type_ parameter for docs
+    # noinspection PyIncorrectDocstring
     def last(self, arg, default=None, type_=str, ephem=False):
-        """
+        r"""
         Gets the last value of an arg.
 
         :param str arg: The name of the arg to get.
         :param default: The default value to return if the arg is not found. Not cast to type.
-        :param type type_: The type that the arg should be returned as.
+        :param type type\_: The type that the arg should be returned as.
         :param bool ephem: Whether to return an ephemeral argument if such exists.
         :raises: InvalidArgument if the arg cannot be cast to the type
         :return: The relevant argument.
@@ -375,7 +381,7 @@ class ParsedArguments:
 
 # ==== other helpers ====
 def argquote(arg: str):
-    if " " in arg:
+    if any(char in arg for char in string.whitespace):
         arg = arg.replace('"', '\\"')  # re.sub(r'(?<!\\)"', r'\"', arg)
         arg = f'"{arg}"'
     return arg
@@ -441,7 +447,9 @@ class CustomStringView(StringView):
                 continue
 
             # opening quote
-            if not is_quoted and current in ALL_QUOTES and current != "'":  # special case: apostrophes in mid-string
+            if (
+                not is_quoted and current in ALL_QUOTES and current != "'" and current != "’"
+            ):  # special case: apostrophes in mid-string
                 close_quote = QUOTE_PAIRS.get(current)
                 is_quoted = True
                 _escaped_quotes = (current, close_quote)

@@ -27,6 +27,7 @@ from utils.functions import (
     search_and_select,
     try_delete,
     camel_to_title,
+    ordinal,
 )
 from . import (
     Combat,
@@ -102,13 +103,13 @@ class InitTracker(commands.Cog):
                 log.exception("Failed to handle init effect button click interaction:")
 
     # ==== commands ====
-    @commands.group(aliases=["i"], invoke_without_command=True)
+    @commands.group(aliases=["i", "I"], invoke_without_command=True)
     async def init(self, ctx):
         """Commands to help track initiative."""
         await ctx.send(f"Incorrect usage. Use {ctx.prefix}help init for help.")
 
     @init.command()
-    async def begin(self, ctx, *args):
+    async def begin(self, ctx, *, args=""):
         """
         Begins combat in the channel the command is invoked in.
         __Valid Arguments__
@@ -165,7 +166,7 @@ class InitTracker(commands.Cog):
         await ctx.send(out)
 
     @init.command()
-    async def add(self, ctx, modifier: int, name: str, *args):
+    async def add(self, ctx, modifier: int, name: str, *, args=""):
         """
         Adds a generic combatant to the initiative order.
 
@@ -234,7 +235,7 @@ class InitTracker(commands.Cog):
         await combat.final(ctx)
 
     @init.command()
-    async def madd(self, ctx, monster_name: str, *args):
+    async def madd(self, ctx, monster_name: str, *, args=""):
         """Adds a monster to combat.
         __Valid Arguments__
         `-name <name>` - Sets the combatant's name. Use "#" for auto-numbering, e.g. "Orc#"
@@ -245,7 +246,7 @@ class InitTracker(commands.Cog):
         `-group <group>` - Adds the combatant to a group.
         `adv`/`dis` - Give advantage or disadvantage to the initiative roll.
         `-b <condition bonus>` - Adds a bonus to the combatant's initiative roll.
-        `-rollhp` - Rolls the monsters HP, instead of using the default value.
+        `rollhp` - Rolls the monsters HP, instead of using the default value.
         `-hp <hp>` - Sets starting HP.
         `-thp <thp>` - Sets starting THP.
         `-ac <ac>` - Sets the combatant's starting AC.
@@ -510,9 +511,10 @@ class InitTracker(commands.Cog):
         combat = await ctx.get_combat()
 
         to_remove = []
-        for co in combat.get_combatants():
-            if isinstance(co, MonsterCombatant) and co.hp <= 0 and co is not combat.current_combatant:
-                to_remove.append(co)
+        if combat.options.deathdelete:
+            for co in combat.get_combatants():
+                if isinstance(co, MonsterCombatant) and co.hp <= 0 and co is not combat.current_combatant:
+                    to_remove.append(co)
 
         messages = combat.skip_rounds(numrounds)
 
@@ -525,7 +527,7 @@ class InitTracker(commands.Cog):
         await combat.final(ctx)
 
     @init.command(name="reroll", aliases=["shuffle"])
-    async def reroll(self, ctx, *args):
+    async def reroll(self, ctx, *, args=""):
         """
         Rerolls initiative for all combatants, and starts a new round of combat.
         __Valid Arguments__
@@ -561,11 +563,11 @@ class InitTracker(commands.Cog):
         await combat.final(ctx)
 
     @init.command(name="meta", aliases=["metaset"])
-    async def metasetting(self, ctx, *settings):
+    async def metasetting(self, ctx, *, settings=""):
         """
         Changes the settings of the active combat.
         __Valid Settings__
-        `dyn` - Dynamic initiative; Rerolls all initiatves at the start of a round.
+        `dyn` - Dynamic initiative; Rerolls all initiatives at the start of a round.
         `turnnotif` - Notifies the controller of the next combatant in initiative.
         `deathdelete` - Toggles removing monsters below 0 HP.
         `-name <name>` - Sets a name for the combat instance.
@@ -616,7 +618,9 @@ class InitTracker(commands.Cog):
             out = combat.get_summary()
         await destination.send(out)
 
-    @init.command()
+    @init.group(
+        invoke_without_command=True,
+    )
     async def note(self, ctx, name: str, *, note: str = ""):
         """Attaches a note to a combatant."""
         combat = await ctx.get_combat()
@@ -625,15 +629,28 @@ class InitTracker(commands.Cog):
         if combatant is None:
             return await ctx.send("Combatant not found.")
 
-        combatant.notes = note
         if note == "":
-            await ctx.send("Removed note.")
+            await ctx.send(f"```md\n{combatant}\n# {combatant.notes}\n```")
         else:
-            await ctx.send("Added note.")
+            combatant.notes = note
+            await ctx.send(f"Added note to {combatant.name}.")
+        await combat.final(ctx)
+
+    @note.command(name="remove", aliases=["delete"])
+    async def note_remove(self, ctx, name: str):
+        """Removes a note from a combatant."""
+        combat = await ctx.get_combat()
+
+        combatant = await combat.select_combatant(ctx, name)
+        if combatant is None:
+            return await ctx.send("Combatant not found.")
+        combatant.notes = ""
+
+        await ctx.send(f"Removed note from {combatant.name}.")
         await combat.final(ctx)
 
     @init.command(aliases=["opts"])
-    async def opt(self, ctx, name: str, *args):
+    async def opt(self, ctx, name: str, *, args=""):
         """
         Edits the options of a combatant.
         __Valid Arguments__
@@ -941,7 +958,7 @@ class InitTracker(commands.Cog):
         await gameutils.send_hp_result(ctx, combatant, delta)
 
     @init.command()
-    async def effect(self, ctx, target_name: str, effect_name: str, *args):
+    async def effect(self, ctx, target_name: str, effect_name: str, *, args=""):
         """
         Attaches a status effect to a combatant.
         [args] is a set of args that affects a combatant in combat.
@@ -967,6 +984,7 @@ class InitTracker(commands.Cog):
         __Checks/Saves__
         `-sb <save bonus>` - Adds a bonus to all saving throws.
         `-sadv/sdis <ability>` - Gives advantage/disadvantage on saving throws for the provided ability, or "all" for all saves.
+        `-dc <dc>` - Adds a bonus to all saving throw DCs.
         `-cb <check bonus>` - Adds a bonus to all ability checks.
         `-cadv/cdis <ability>` - Gives advantage/disadvantage on ability checks for the provided ability, or "all" for all checks. If a base ability is passed, affects all skills based on that ability.
         __General__
@@ -980,7 +998,12 @@ class InitTracker(commands.Cog):
         targets = []
 
         for i, t in enumerate([target_name] + args.get("t")):
-            target = await combat.select_combatant(ctx, t, f"Select target #{i + 1}.", select_group=True)
+            target = await combat.select_combatant(
+                ctx,
+                t,
+                f"Pick your {ordinal(i+1)} target.",
+                select_group=True,
+            )
             if isinstance(target, CombatantGroup):
                 targets.extend(target.get_combatants())
             else:
@@ -1043,16 +1066,39 @@ class InitTracker(commands.Cog):
         out = ""
 
         for combatant in targets:
+            effects = combatant.get_effects()
+            if not effects:
+                out += f"{combatant.name} has no effects to remove.\n"
+                continue
             if effect is None:
-                combatant.remove_all_effects()
-                out += f"All effects removed from {combatant.name}.\n"
+                confirmation = await confirm(
+                    ctx,
+                    (
+                        f"Are you sure you want to remove all effects ({len(effects)}) from {combatant.name}? (Reply"
+                        " with yes/no)"
+                    ),
+                    delete_msgs=True,
+                )
+                if confirmation:
+                    combatant.remove_all_effects()
+                    out += f"All effects removed from {combatant.name}.\n"
+                else:
+                    out += f"No effects removed from {combatant.name}.\n"
             else:
                 to_remove = await combatant.select_effect(effect)
-                children_removed = ""
-                if to_remove.children:
-                    children_removed = f"Also removed {len(to_remove.children)} child effects.\n"
-                to_remove.remove()
-                out += f"Effect {to_remove.name} removed from {combatant.name}.\n{children_removed}"
+                confirmation = to_remove.name.lower() == effect.lower() or await confirm(
+                    ctx,
+                    f"Are you sure you want to remove {to_remove.name} from {combatant.name}? (Reply with yes/no)",
+                    delete_msgs=True,
+                )
+                if confirmation:
+                    children_removed = ""
+                    if to_remove.children:
+                        children_removed = f"Also removed {len(to_remove.children)} child effects.\n"
+                    to_remove.remove()
+                    out += f"Effect {to_remove.name} removed from {combatant.name}.\n{children_removed}"
+                else:
+                    out += f"{to_remove.name} not removed from {combatant.name}.\n"
         await ctx.send(out)
         await combat.final(ctx)
 
@@ -1063,7 +1109,7 @@ class InitTracker(commands.Cog):
         Rolls an attack against another combatant.
         __**Valid Arguments**__
         {VALID_AUTOMATION_ARGS}
-        -custom - Makes a custom attack with 0 to hit and base damage. Use `-b` and `-d` to add to hit and damage.
+        custom - Modifier to indicate that the (arbitrarily-named) attack is custom, with custom to hit and damage values. Use `-b` and `-d` like this: `!init attack "pizza" custom -b 3 -d 1`
         """,
     )
     async def attack(self, ctx, atk_name=None, *, args=""):
@@ -1092,7 +1138,7 @@ class InitTracker(commands.Cog):
         Rolls an attack as another combatant.
         __**Valid Arguments**__
         {VALID_AUTOMATION_ARGS}
-        -custom - Makes a custom attack with 0 to hit and base damage. Use `-b` and `-d` to add to hit and damage.
+        custom - Modifier to indicate that the (arbitrarily-named) attack is custom, with custom to hit and damage values. Use `-b` and `-d` like this: `!init attack "pizza" custom -b 3 -d 1`
         """,
     )
     async def aoo(self, ctx, combatant_name, atk_name=None, *, args=""):
@@ -1304,7 +1350,7 @@ class InitTracker(commands.Cog):
         Casts a spell against another combatant.
         __**Valid Arguments**__
         {VALID_SPELLCASTING_ARGS}
-        
+
         {VALID_AUTOMATION_ARGS}
         """
     )
@@ -1347,15 +1393,19 @@ class InitTracker(commands.Cog):
         is_character = isinstance(combatant, PlayerCombatant)
         if is_character and combatant.character_owner == str(ctx.author.id):
             args = await helpers.parse_snippets(
-                args, ctx, character=combatant.character, base_args=[combatant_name, spell_name]
+                args, ctx, character=combatant.character, base_args=[combatant.name, spell_name]
             )
         else:
-            args = await helpers.parse_snippets(args, ctx, statblock=combatant, base_args=[combatant_name, spell_name])
+            args = await helpers.parse_snippets(args, ctx, statblock=combatant, base_args=[combatant.name, spell_name])
         args = argparse(args)
 
         if not args.last("i", type_=bool):
             try:
-                spell = await select_spell_full(ctx, spell_name, list_filter=lambda s: s.name in combatant.spellbook)
+                spell = await select_spell_full(
+                    ctx,
+                    spell_name,
+                    list_filter=lambda s: s.name in combatant.spellbook,
+                )
             except NoSelectionElements:
                 return await ctx.send(
                     f"No matching spells found in {combatant.name}'s spellbook. Cast again "

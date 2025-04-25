@@ -5,6 +5,7 @@ Most of this module was coded 5 miles in the air. (Aug 8, 2017)
 
 @author: andrew
 """
+
 import collections
 import logging
 import re
@@ -20,8 +21,8 @@ from cogs5e.models.errors import ConsumableException, InvalidArgument, NoSelecti
 from cogs5e.utils import actionutils, checkutils, gameutils, targetutils
 from cogs5e.utils.gameutils import resolve_strict_coins
 from cogs5e.utils.help_constants import *
-from gamedata.lookuputils import get_spell_choices, select_spell_full
-from utils import constants
+from gamedata.lookuputils import filter_spells_by_version, get_spell_choices, select_spell_full
+from utils.constants import COUNTER_BUBBLES
 from utils.argparser import argparse
 from utils.functions import confirm, maybe_mod, search, search_and_select, try_delete
 
@@ -89,16 +90,16 @@ class GameTrack(commands.Cog):
                 f"{character.spellbook.slots_str(level)} ({(value - old_slots):+})"
             )
 
+        bubble = COUNTER_BUBBLES["bubble"]
+        pact = COUNTER_BUBBLES["square"]
+
         # footer - pact vs non pact
         if character.spellbook.max_pact_slots is not None:
             embed.set_footer(
-                text=(
-                    f"{constants.FILLED_BUBBLE} = Available / {constants.EMPTY_BUBBLE} = Used\n"
-                    f"{constants.FILLED_BUBBLE_ALT} / {constants.EMPTY_BUBBLE_ALT} = Pact Slot"
-                )
+                text=f"{bubble.filled} = Available / {bubble.empty} = Used\n{pact.filled} / {pact.empty} = Pact Slot"
             )
         else:
-            embed.set_footer(text=f"{constants.FILLED_BUBBLE} = Available / {constants.EMPTY_BUBBLE} = Used")
+            embed.set_footer(text=f"{bubble.filled} = Available / {bubble.empty} = Used")
 
         await ctx.send(embed=embed)
 
@@ -283,7 +284,7 @@ class GameTrack(commands.Cog):
         await gameutils.send_hp_result(ctx, caster, delta)
 
     @game.group(name="deathsave", aliases=["ds"], invoke_without_command=True)
-    async def game_deathsave(self, ctx, *args):
+    async def game_deathsave(self, ctx, *, args=""):
         """Commands to manage character death saves.
         __Valid Arguments__
         See `!help save`."""
@@ -411,6 +412,8 @@ class GameTrack(commands.Cog):
 
         spells_known = collections.defaultdict(lambda: [])
         choices = await get_spell_choices(ctx)
+        choices = await filter_spells_by_version(ctx, choices)
+
         for sb_spell in character.spellbook.spells:
             if not (sb_spell.prepared or show_unprepared):
                 flag_show_prepared_help = True
@@ -475,7 +478,7 @@ class GameTrack(commands.Cog):
         await ep.send_to(ctx)
 
     @spellbook.command(name="add")
-    async def spellbook_add(self, ctx, spell_name, *args):
+    async def spellbook_add(self, ctx, spell_name, *, args=""):
         """
         Adds a spell to the spellbook override.
 
@@ -528,10 +531,12 @@ class GameTrack(commands.Cog):
 
         if not await confirm(
             ctx,
-            f"This will remove {num_to_remove} override{'s' if num_to_remove>1 else ''} from your spellbook. "
-            "Are you *absolutely sure* you want to continue?",
+            (
+                f"This will remove {num_to_remove} override{'s' if num_to_remove>1 else ''} from your spellbook. "
+                "Are you *absolutely sure* you want to continue?"
+            ),
         ):
-            return await ctx.send("Unconfirmed. Aborting.")
+            return await ctx.send("Unconfirmed. Cancelling.")
 
         character.remove_all_known_spells()
 
@@ -596,6 +601,8 @@ class GameTrack(commands.Cog):
             new_value = counter.value + result
         elif operator == "set":
             new_value = result
+        elif name in ("set", "mod"):
+            return await ctx.send(f"Invalid operator. Did you mean `{ctx.prefix}cc {operator} {name} {modifier}`?")
         else:
             return await ctx.send("Invalid operator. Use mod or set.")
 
@@ -617,7 +624,7 @@ class GameTrack(commands.Cog):
         await ctx.send(embed=result_embed)
 
     @customcounter.command(name="create")
-    async def customcounter_create(self, ctx, name, *args):
+    async def customcounter_create(self, ctx, name, *, args=""):
         """
         Creates a new custom counter.
         __Valid Arguments__
@@ -627,9 +634,9 @@ class GameTrack(commands.Cog):
         `-max <max value>` - The maximum value of the counter.
         `-min <min value>` - The minimum value of the counter.
         `-value <value>` - The initial value for the counter.
-        `-type <bubble|default>` - Whether the counter displays bubbles to show remaining uses or numbers. Default - numbers.
+        `-type <bubble|square|hex|star|default>` - Whether the counter displays bubbles/squares/hexes/stars to show remaining uses or numbers. Default - numbers.
         `-resetto <value>` - The value to reset the counter to. Default - maximum.
-        `-resetby <value>` - Rather than resetting to a certain value, modify the counter by this much per reset. Supports dice.
+        `-resetby <value>` - Rather than resetting to a certain value, modify the counter by this much per reset. Supports annotated dice strings.
         """  # noqa: E501
         character: Character = await ctx.get_character()
 
@@ -638,7 +645,7 @@ class GameTrack(commands.Cog):
             if await confirm(ctx, "Warning: This will overwrite an existing consumable. Continue? (Reply with yes/no)"):
                 character.consumables.remove(conflict)
             else:
-                return await ctx.send("Overwrite unconfirmed. Aborting.")
+                return await ctx.send("Overwrite unconfirmed. Cancelling.")
 
         args = argparse(args)
         _reset = args.last("reset")
@@ -672,7 +679,7 @@ class GameTrack(commands.Cog):
             await ctx.send(f"Custom counter created.\n**{name}**\n{new_counter.full_str()}")
 
     @customcounter.command(name="edit")
-    async def customcounter_edit(self, ctx, name, *args):
+    async def customcounter_edit(self, ctx, name, *, args=""):
         """
         Edits an existing custom counter replacing passed arguments.
 
@@ -686,9 +693,9 @@ class GameTrack(commands.Cog):
         `-reset <short|long|none>` - Counter will reset to max on a short/long rest, or not ever when "none". Default - will reset on a call of `!cc reset`.
         `-max <max value>` - The maximum value of the counter.
         `-min <min value>` - The minimum value of the counter.
-        `-type <bubble|default>` - Whether the counter displays bubbles to show remaining uses or numbers. Default - numbers.
+        `-type <bubble|square|hex|star|default>` - Whether the counter displays bubbles/squares/hexes/stars to show remaining uses or numbers. Default - numbers.
         `-resetto <value>` - The value to reset the counter to. Default - maximum.
-        `-resetby <value>` - Rather than resetting to a certain value, modify the counter by this much per reset. Supports dice.
+        `-resetby <value>` - Rather than resetting to a certain value, modify the counter by this much per reset. Supports annotated dice strings.
         """  # noqa: E501
         character: Character = await ctx.get_character()
         counter = await character.select_consumable(ctx, name)
@@ -757,9 +764,9 @@ class GameTrack(commands.Cog):
         if character.consumables:
             # paginate if > 25
             total = len(character.consumables)
-            maxpage = total // 25 + 1
-            page = max(1, min(page, maxpage))
             pages = [character.consumables[i : i + 25] for i in range(0, total, 25)]
+            maxpage = len(pages)
+            page = max(1, min(page, maxpage))
             for counter in pages[page - 1]:
                 embed.add_field(name=counter.name, value=counter.full_str())
             if total > 25:
@@ -835,7 +842,7 @@ class GameTrack(commands.Cog):
 
         embed = result.embed
         embed.colour = char.get_color()
-        if "thumb" not in args and char.options.embed_image:
+        if "thumb" not in args and char.options.embed_image and char.image:
             embed.set_thumbnail(url=char.image)
 
         await ctx.send(embed=embed)

@@ -3,6 +3,7 @@ import collections
 import d20
 
 from cogs5e.models.errors import CounterOutOfBounds, InvalidArgument, NoReset
+from utils import constants
 from utils.functions import bubble_format
 from .attack import AttackList
 from .spellcasting import SpellbookSpell
@@ -158,8 +159,8 @@ class CustomCounter:
             raise InvalidArgument("Invalid reset.")
         if any(c in name for c in ".$"):
             raise InvalidArgument("Invalid character in CC name.")
-        if display_type == "bubble" and (maxv is None or minv is None):
-            raise InvalidArgument("Bubble display requires a max and min value.")
+        if display_type in constants.COUNTER_BUBBLES and (maxv is None or minv is None):
+            raise InvalidArgument(f"{display_type.title()} display requires a max and min value.")
 
         # sanity checks
         if reset not in ("none", None) and (maxv is None and reset_to is None and reset_by is None):
@@ -172,8 +173,8 @@ class CustomCounter:
         min_value = None
         if minv is not None:
             min_value = character.evaluate_math(minv)
-            if display_type == "bubble" and (min_value < 0):
-                raise InvalidArgument("Bubble display requires a min value of >= 0.")
+            if display_type in constants.COUNTER_BUBBLES and (min_value < 0):
+                raise InvalidArgument(f"{display_type.title()} display requires a min value of >= 0.")
 
         max_value = None
         if maxv is not None:
@@ -190,10 +191,14 @@ class CustomCounter:
                 raise InvalidArgument(f"Reset to value {reset_to_value} is greater than max value {max_value}.")
 
         if reset_by is not None:
+            evaluated_str = character.evaluate_annostr(str(reset_by))
+
             try:
-                d20.parse(str(reset_by))
+                d20.parse(evaluated_str)
             except d20.RollSyntaxError:
-                raise InvalidArgument(f"{reset_by} (`resetby`) cannot be interpreted as a number or dice string.")
+                raise InvalidArgument(
+                    f"`{evaluated_str}` (`resetby`) cannot be interpreted as a number or dice string."
+                )
 
         # set initial value if not already set
         if initial_value is None:
@@ -257,6 +262,11 @@ class CustomCounter:
             return None
         return self._character.evaluate_math(self.reset_to)
 
+    def get_reset_by(self):
+        if self.reset_by is None:
+            return None
+        return self._character.evaluate_annostr(self.reset_by)
+
     @property
     def value(self):
         return self._value
@@ -298,7 +308,7 @@ class CustomCounter:
 
         # reset by: modify current value
         elif self.reset_by is not None:
-            roll_result = d20.roll(self.reset_by)
+            roll_result = d20.roll(self.get_reset_by())
             target_value = old_value + roll_result.total
             new_value = self.set(target_value)
             delta = f"+{roll_result.result}"
@@ -322,9 +332,9 @@ class CustomCounter:
         _max = self.get_max()
         _reset = self.RESET_MAP.get(self.reset_on)
 
-        if self.display_type == "bubble":
+        if self.display_type in constants.COUNTER_BUBBLES:
             assert self.max is not None
-            val = f"{bubble_format(self.value, _max)}\n"
+            val = f"{bubble_format(self.value, _max, chars=constants.COUNTER_BUBBLES[self.display_type])}\n"
         else:
             val = f"**Current Value**: {self.value}\n"
             if self.min is not None and self.max is not None:
@@ -344,9 +354,9 @@ class CustomCounter:
     def __str__(self):
         _max = self.get_max()
 
-        if self.display_type == "bubble":
+        if self.display_type in constants.COUNTER_BUBBLES:
             assert self.max is not None
-            out = bubble_format(self.value, _max)
+            out = bubble_format(self.value, _max, chars=constants.COUNTER_BUBBLES[self.display_type])
         else:
             if self.max is not None:
                 out = f"{self.value}/{_max}"

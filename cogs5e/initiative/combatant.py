@@ -3,6 +3,8 @@ from typing import Callable, List, Optional, TYPE_CHECKING, TypeVar
 
 import disnake
 
+import aliasing.evaluators
+import aliasing.api.statblock
 import cogs5e.models.character
 from cogs5e.models.sheet.attack import AttackList
 from cogs5e.models.sheet.base import BaseStats, Levels, Saves, Skill, Skills
@@ -16,6 +18,7 @@ from .effects import InitiativeEffect
 from .errors import RequiresContext
 from .types import BaseCombatant, CombatantType
 from .utils import create_combatant_id
+from ..models.errors import InvalidArgument
 
 if TYPE_CHECKING:
     from .group import CombatantGroup
@@ -101,19 +104,17 @@ class Combatant(BaseCombatant, StatBlock):
 
     def to_dict(self):
         d = super().to_dict()
-        d.update(
-            {
-                "controller_id": self.controller_id,
-                "init": self.init,
-                "private": self.is_private,
-                "index": self.index,
-                "notes": self.notes,
-                "effects": [e.to_dict() for e in self._effects],
-                "group_id": self._group_id,
-                "type": self.type.value,
-                "id": self.id,
-            }
-        )
+        d.update({
+            "controller_id": self.controller_id,
+            "init": self.init,
+            "private": self.is_private,
+            "index": self.index,
+            "notes": self.notes,
+            "effects": [e.to_dict() for e in self._effects],
+            "group_id": self._group_id,
+            "type": self.type.value,
+            "id": self.id,
+        })
         return d
 
     @property
@@ -133,7 +134,7 @@ class Combatant(BaseCombatant, StatBlock):
         base_hp = self._max_hp or 0
         base_effect_hp = self.active_effects(mapper=lambda effect: effect.effects.max_hp_value, reducer=max, default=0)
         bonus_effect_hp = self.active_effects(mapper=lambda effect: effect.effects.max_hp_bonus, reducer=sum, default=0)
-        return max(base_hp, base_effect_hp) + bonus_effect_hp
+        return (base_effect_hp or base_hp) + bonus_effect_hp
 
     @max_hp.setter
     def max_hp(self, new_max_hp):
@@ -153,15 +154,17 @@ class Combatant(BaseCombatant, StatBlock):
         """Returns a string representation of the combatant's HP."""
         out = ""
         if not self.is_private or private:
+            hp_strs = []
             if self.max_hp is not None and self.hp is not None:
-                out = f"<{self.hp}/{self.max_hp} HP>"
+                hp_strs.append(f"{self.hp}/{self.max_hp} HP")
             elif self.hp is not None:
-                out = f"<{self.hp} HP>"
-            else:
-                out = ""
+                hp_strs.append(f"{self.hp} HP")
 
             if self.temp_hp and self.temp_hp > 0:
-                out += f" (+{self.temp_hp} temp)"
+                hp_strs.append(f"{self.temp_hp} temp")
+
+            out = f"<{', '.join(hp_strs) or 'None'}>"
+
         elif self.max_hp is not None and self.max_hp > 0:
             ratio = self.hp / self.max_hp
             if ratio >= 1:
@@ -174,6 +177,8 @@ class Combatant(BaseCombatant, StatBlock):
                 out = "<Critical>"
             elif ratio <= 0:
                 out = "<Dead>"
+        else:  # Max HP is less than 0?!
+            out = "<Very Dead>"
         return out
 
     @property
@@ -181,7 +186,7 @@ class Combatant(BaseCombatant, StatBlock):
         base_ac = self._ac or 0
         base_effect_ac = self.active_effects(mapper=lambda effect: effect.effects.ac_value, reducer=max, default=0)
         bonus_effect_ac = self.active_effects(mapper=lambda effect: effect.effects.ac_bonus, reducer=sum, default=0)
-        return max(base_effect_ac, base_ac) + bonus_effect_ac
+        return (base_effect_ac or base_ac) + bonus_effect_ac
 
     @ac.setter
     def ac(self, new_ac):
@@ -409,23 +414,18 @@ class Combatant(BaseCombatant, StatBlock):
     # hooks
     def on_turn(self, num_turns: int = 1):
         """
-        A method called at the start of each of the combatant's turns.
+        A method called at the start of each combatant's turns.
         :param num_turns: The number of turns that just passed.
         :return: None
         """
         for e in self.get_effects().copy():
             e.on_turn(num_turns)
 
-    def on_turn_end(self, num_turns: int = 1):
-        """A method called at the end of each of the combatant's turns."""
-        for e in self.get_effects().copy():
-            e.on_turn_end(num_turns)
-
     def on_remove(self):
         """
         Called when the combatant is removed from combat, either through !i remove or the combat ending.
         """
-        pass
+        self.remove_all_effects()
 
     # stringification
     def get_summary(self, private=False, no_notes=False) -> str:
@@ -463,6 +463,20 @@ class Combatant(BaseCombatant, StatBlock):
             duration=duration, parenthetical=parenthetical, concentration=concentration, description=description
         )
         return f"{name} {hp_ac} {resists}{note_str}\n{effects}".strip()
+
+    def evaluate_annostr(self, varstr):
+        """
+        Evaluates annotated string using AutomationEvaluator with Combatant/Caster.
+        :param varstr - the string to search and replace.
+        :returns str - the string with annotations evaluated
+        """
+        evaluator = aliasing.evaluators.AutomationEvaluator.with_caster(self)
+        evaluator.builtins["caster"] = aliasing.api.statblock.AliasStatBlock(self)
+
+        try:
+            return evaluator.transformed_str(varstr)
+        except Exception as e:
+            raise InvalidArgument(f"Cannot evaluate `{varstr}`: {e}")
 
     def _get_long_effects(self, **kwargs) -> str:
         return "\n".join(f"* {e.get_str(**kwargs)}" for e in self.get_effects())
@@ -781,7 +795,7 @@ class PlayerCombatant(Combatant):
         base_ac = self.base_ac
         base_effect_ac = self.active_effects(mapper=lambda effect: effect.effects.ac_value, reducer=max, default=0)
         bonus_effect_ac = self.active_effects(mapper=lambda effect: effect.effects.ac_bonus, reducer=sum, default=0)
-        return max(base_effect_ac, base_ac) + bonus_effect_ac
+        return (base_effect_ac or base_ac) + bonus_effect_ac
 
     @ac.setter
     def ac(self, new_ac):
@@ -803,7 +817,7 @@ class PlayerCombatant(Combatant):
         base_hp = self._max_hp or self.character.max_hp
         base_effect_hp = self.active_effects(mapper=lambda effect: effect.effects.max_hp_value, reducer=max, default=0)
         bonus_effect_hp = self.active_effects(mapper=lambda effect: effect.effects.max_hp_bonus, reducer=sum, default=0)
-        return max(base_hp, base_effect_hp) + bonus_effect_hp
+        return (base_effect_hp or base_hp) + bonus_effect_hp
 
     @max_hp.setter
     def max_hp(self, new_max_hp):

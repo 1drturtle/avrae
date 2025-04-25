@@ -1,7 +1,7 @@
 import enum
 
-
 # NOTE: if writing new enums for the automation engine, make sure to update automation-common too!
+
 
 # action activation type
 class ActivationType(enum.IntEnum):

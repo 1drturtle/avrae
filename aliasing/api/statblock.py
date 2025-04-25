@@ -284,6 +284,16 @@ class AliasBaseStats:
         """
         return self._stats.get_mod(str(stat))
 
+    def get(self, stat):
+        """
+        Get the integer value of a stat (case sensitive, lowercase. strength, dexterity, etc).
+
+        :param str stat: The stat to look up
+        :return: The integer value of the stat.
+        :rtype: int
+        """
+        return self._stats.__getitem__(stat)
+
     def __str__(self):
         return str(self._stats)
 
@@ -553,7 +563,7 @@ class AliasSkills:
 
     def __getattr__(self, item):
         if item not in self._skills.skills:
-            raise ValueError(f"{item} is not a skill.")
+            raise AttributeError(f"{item} is not a skill.")
         return AliasSkill(self._skills.__getattr__(item))
 
     def __getitem__(self, item):

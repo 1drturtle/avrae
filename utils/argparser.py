@@ -154,7 +154,7 @@ class ParsedArguments:
     # Have to escape the _ in the type_ parameter for docs
     # noinspection PyIncorrectDocstring
     def get(self, arg, default=None, type_=str, ephem=False):
-        """
+        r"""
         Gets a list of all values of an argument.
 
         :param str arg: The name of the arg to get.
@@ -177,7 +177,7 @@ class ParsedArguments:
     # Have to escape the _ in the type_ parameter for docs
     # noinspection PyIncorrectDocstring
     def last(self, arg, default=None, type_=str, ephem=False):
-        """
+        r"""
         Gets the last value of an arg.
 
         :param str arg: The name of the arg to get.
@@ -447,7 +447,9 @@ class CustomStringView(StringView):
                 continue
 
             # opening quote
-            if not is_quoted and current in ALL_QUOTES and current != "'":  # special case: apostrophes in mid-string
+            if (
+                not is_quoted and current in ALL_QUOTES and current != "'" and current != "’"
+            ):  # special case: apostrophes in mid-string
                 close_quote = QUOTE_PAIRS.get(current)
                 is_quoted = True
                 _escaped_quotes = (current, close_quote)

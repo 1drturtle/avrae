@@ -134,14 +134,17 @@ class Compendium:
 
         ldclient.set_config(ldclient.Config(sdk_key=config.LAUNCHDARKLY_SDK_KEY))
 
-        if ldclient.get().variation(
-            "data.monsters.gridfs", {"key": "anonymous-user-start-bot", "anonymous": True}, False
-        ):
-            fs = motor.motor_asyncio.AsyncIOMotorGridFSBucket(mdb)
-            data = await fs.open_download_stream_by_name(filename="monsters")
-            gridout = await data.read()
-            self.raw_monsters = json.loads(gridout)
-        else:
+        # TODO: Try importing Context as a standalone method
+        try:
+            context = ldclient.Context.create("anonymous-user-start-bot")
+            if ldclient.get().variation("data.monsters.gridfs", context, False) or config.TESTING:
+                fs = motor.motor_asyncio.AsyncIOMotorGridFSBucket(mdb)
+                data = await fs.open_download_stream_by_name(filename="monsters")
+                gridout = await data.read()
+                self.raw_monsters = json.loads(gridout)
+            else:
+                self.raw_monsters = lookup.get("monsters", [])
+        except:
             self.raw_monsters = lookup.get("monsters", [])
         self.raw_backgrounds = lookup.get("backgrounds", [])
         self.raw_adventuring_gear = lookup.get("adventuring-gear", [])

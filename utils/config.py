@@ -29,7 +29,6 @@ REDIS_DB_NUM = int(os.getenv("REDIS_DB_NUM", 0))
 DEFAULT_PREFIX = os.getenv("DEFAULT_PREFIX", "!")
 
 # ---- monitoring ----
-SENTRY_DSN = os.getenv("SENTRY_DSN")
 DD_SERVICE = os.getenv("DD_SERVICE")
 
 # ---- character sheets ---
@@ -69,7 +68,7 @@ DDB_GAMELOG_ENDPOINT = os.getenv("DDB_GAMELOG_ENDPOINT", "https://game-log-rest-
 DDB_CHARACTER_SERVICE_URL = os.getenv(
     "DDB_CHARACTER_SERVICE_URL", "https://character-service.dndbeyond.com/character/v5"
 )
-DDB_SCDS_SERVICE_URL = os.getenv("DDB_SCDS_SERVICE_URL", "https://character-service-scds.dndbeyond.com/v1")
+DDB_SCDS_SERVICE_URL = os.getenv("DDB_SCDS_SERVICE_URL", "https://character-service-scds.dndbeyond.com/v2")
 DDB_MEDIA_S3_BUCKET_DOMAIN = os.getenv("DDB_MEDIA_S3_BUCKET_DOMAIN", "www.dndbeyond.com")  # used for !token
 
 # ---- launchdarkly ----

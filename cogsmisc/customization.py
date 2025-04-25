@@ -894,7 +894,7 @@ class Customization(commands.Cog):
             if cvar is None:
                 return await ctx.send("This cvar is not defined.")
             return await send_long_code_text(
-                ctx, outside_codeblock=f"**{name}**:".replace("_", "\_"), inside_codeblock=cvar
+                ctx, outside_codeblock=f"**{name}**:".replace("_", r"\_"), inside_codeblock=cvar
             )
 
         helpers.set_cvar(character, name, value)
@@ -940,7 +940,7 @@ class Customization(commands.Cog):
         character: Character = await ctx.get_character()
         await ctx.send(
             "{}'s character variables:\n{}".format(character.name, ", ".join(sorted(character.cvars.keys()))).replace(
-                "_", "\_"
+                "_", r"\_"
             )
         )
 
@@ -1162,12 +1162,17 @@ class Customization(commands.Cog):
     async def server_settings(self, ctx):
         """Opens the server settings menu. You must have *Manage Server* permissions to edit any settings here"""
         guild_settings = await ctx.get_server_settings()
+        try:
+            readonly = not await checks.admin_or_permissions(manage_guild=True).predicate(ctx)
+        except commands.CheckFailure:
+            readonly = True
+
         settings_ui = ui.ServerSettingsUI.new(
             ctx.bot,
             owner=ctx.author,
             settings=guild_settings,
             guild=ctx.guild,
-            readonly=not ctx.author.guild_permissions.manage_guild,
+            readonly=readonly,
         )
         await settings_ui.send_to(ctx)
 

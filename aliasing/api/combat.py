@@ -6,6 +6,7 @@ import cogs5e.initiative as init
 from aliasing.api.functions import SimpleRollResult
 from aliasing.api.statblock import AliasStatBlock
 from cogs5e.models.errors import InvalidSaveType
+from cogs5e.models.automation.utils import parse_save_bonuses
 from cogs5e.models.sheet.statblock import StatBlock
 from utils.argparser import ParsedArguments
 from . import validators
@@ -53,13 +54,13 @@ class SimpleCombat:
         """
         Gets a combatant by its name or ID.
 
-        :param str name: The name or id of the combatant or group to get.
+        :param str name: The name or id of the combatant to get.
         :param strict: Whether combatant name must be a full case insensitive match.
             If this is ``None`` (default), attempts a strict match with fallback to partial match.
             If this is ``False``, it returns the first partial match.
             If this is ``True``, it will only return a strict match.
-        :return: The combatant or group or None.
-        :rtype: :class:`~aliasing.api.combat.SimpleCombatant` or `~aliasing.api.combat.SimpleGroup`
+        :return: The combatant or None.
+        :rtype: :class:`~aliasing.api.combat.SimpleCombatant`
         """
         name = str(name)
         combatant = self._combat.get_combatant(name, strict)
@@ -272,7 +273,9 @@ class SimpleCombatant(AliasStatBlock):
         except ValueError:
             raise InvalidSaveType
 
-        sb = self._combatant.active_effects(mapper=lambda effect: effect.effects.save_bonus, default=[])
+        sb = parse_save_bonuses(
+            ability, self._combatant.active_effects(mapper=lambda effect: effect.effects.save_bonus, default=[])
+        )
         saveroll = save.d20(base_adv=adv)
         if sb:
             saveroll = f'{saveroll}+{"+".join(sb)}'

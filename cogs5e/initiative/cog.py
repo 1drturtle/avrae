@@ -854,7 +854,7 @@ class InitTracker(commands.Cog):
             )
             await ctx.send(result, components=utils.combatant_interaction_components(combatant, message_type))
 
-    @init.group(invoke_without_command=True)
+    @init.group(aliases=["HP"], invoke_without_command=True)
     async def hp(self, ctx, name: str, *, hp: str = None):
         """Modifies the HP of a combatant."""
         combat = await ctx.get_combat()
@@ -969,6 +969,7 @@ class InitTracker(commands.Cog):
         `end` - Makes the effect duration tick on the end of turn, rather than the beginning.
         `-t <target>` - Specifies more combatants to target, chainable (e.g., "-t or1 -t or2").
         `-parent <"[combatant]|[effect]">` - Sets a parent effect from a specified combatant.
+        `-tickon <combatant>` - Specifies the combatant in whose turn the effect timer would tick.
         __Attacks__
         `adv`/`dis` - Give advantage or disadvantage to all attack rolls.
         `-b <bonus>` - Adds a bonus to hit.
@@ -982,7 +983,7 @@ class InitTracker(commands.Cog):
         `-vuln <damage type>` - Gives the combatant vulnerability to the given damage type.
         `-neutral <damage type>` - Removes the combatant's immunity, resistance, or vulnerability to the given damage type.
         __Checks/Saves__
-        `-sb <save bonus>` - Adds a bonus to all saving throws.
+        `-sb <save bonus>` - Adds a bonus to all saving throws. Per-stat bonuses can be specified using the stat's 3 letter abbreviation. (e.g. `-sb 1d4|dex`)
         `-sadv/sdis <ability>` - Gives advantage/disadvantage on saving throws for the provided ability, or "all" for all saves.
         `-dc <dc>` - Adds a bonus to all saving throw DCs.
         `-cb <check bonus>` - Adds a bonus to all ability checks.
@@ -1008,6 +1009,17 @@ class InitTracker(commands.Cog):
                 targets.extend(target.get_combatants())
             else:
                 targets.append(target)
+
+        tick_on_combatant_id = None
+        tickon_arg = args.last("tickon")
+        if tickon_arg:
+            tickon = await combat.select_combatant(
+                ctx,
+                tickon_arg,
+                f"Pick the combatant in whose turn this effect timer would tick.",
+                select_group=False,
+            )
+            tick_on_combatant_id = tickon.id
 
         duration = args.last("dur", -1, int)
         conc = args.last("conc", False, bool)
@@ -1038,6 +1050,7 @@ class InitTracker(commands.Cog):
                     end_on_turn_end=end,
                     concentration=conc,
                     desc=desc,
+                    tick_on_combatant_id=tick_on_combatant_id,
                 )
                 result = combatant.add_effect(effect_obj)
                 if parent:
@@ -1310,7 +1323,7 @@ class InitTracker(commands.Cog):
         aliases=["os"],
         help=f"""
         Rolls an ability save as another combatant.
-        {VALID_CHECK_ARGS}
+        {VALID_SAVE_ARGS}
         """,
     )
     async def offturnsave(self, ctx, combatant_name, save, *, args=""):

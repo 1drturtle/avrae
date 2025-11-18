@@ -427,7 +427,7 @@ def parse_bestiary_builder_traits(data, key):
     attacks = []
     for trait in data[key]:
         name = trait["name"]
-        desc = markdownify(trait["description"]).strip()
+        desc = trait["description"].strip()
         automation = trait["automation"]
 
         if automation is not None:
@@ -567,7 +567,7 @@ def _monster_factory_critterdb(data, bestiary_name):
         raise ExternalImportError(f"Monster is missing hit die or hit die size ({data['name']}).")
     con_by_level = num_hit_die * ability_scores.get_mod("con")
     hp = floor(((hit_die_size + 1) / 2) * num_hit_die) + con_by_level
-    hitdice = f"{num_hit_die}d{hit_die_size} + {con_by_level}"
+    hitdice = f"{num_hit_die}d{hit_die_size} {'+-'[con_by_level<0]} {abs(con_by_level)}"
 
     proficiency = data["stats"]["proficiencyBonus"]
     if proficiency is None:

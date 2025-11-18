@@ -33,7 +33,7 @@ class KafkaProducer:
         log.info("Kafka Initialized")
         self.is_ready = True
         self.producer = Producer(producer_config)
-        self.topic = "dnddev_avraebot" if bot_config.TESTING else "dndprod_avraebot"
+        self.topic = "dndprod_avraebot" if bot_config.ENVIRONMENT == "production" else "dnddev_avraebot"
 
     def _build_producer_config(self, override_config=None):
         """
@@ -133,9 +133,7 @@ class KafkaProducer:
         if not self._validate_producer_ready():
             return None
 
-        ddb_user: Optional[BeyondUser] = await interaction.bot.ddb.get_ddb_user(
-            interaction.context, interaction.author.id
-        )
+        ddb_user: Optional[BeyondUser] = await interaction.bot.ddb.get_ddb_user(interaction, interaction.author.id)
 
         avrae_command = {
             "EVENT_TIME": time.strftime("%Y-%m-%dT%H:%M:%SZ", interaction.created_at.timetuple()),
